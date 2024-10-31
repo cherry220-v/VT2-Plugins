@@ -1,0 +1,6 @@
+[
+    {"keys":  ["ctrl+o"], "command":  {"command":  "openFile"}},
+    {"keys":  ["ctrl+s"], "command":  {"command":  "saveFile"}},
+    {"keys":  ["ctrl+shift+s"], "command":  {"command":  "saveAsFile"}},
+    {"keys":  ["ctrl+shift+t"], "command":  {"command":  "openRecentFile"}}
+]

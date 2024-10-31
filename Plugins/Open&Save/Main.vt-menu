@@ -1,0 +1,37 @@
+{
+  "mainMenu": [
+    {
+      "id": "file",
+      "children": [
+        {
+          "caption": "Open file",
+          "command": {
+            "command": "openFile"
+          },
+          "shortcut": "ctrl+o"
+        },
+        {
+          "caption": "Save file",
+          "command": {
+            "command": "saveFile"
+          },
+          "shortcut": "ctrl+s"
+        },
+        {
+          "caption": "Save file as",
+          "command": {
+            "command": "saveAsFile"
+          },
+          "shortcut": "ctrl+shift+s"
+        },
+        {
+          "caption": "Open recent file",
+          "command": {
+            "command": "openRecentFile"
+          },
+          "shortcut": "ctrl+shift+t"
+        }
+      ]
+    }
+  ]
+}

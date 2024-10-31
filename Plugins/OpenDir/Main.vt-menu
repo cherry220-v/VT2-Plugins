@@ -1,0 +1,15 @@
+{
+  "mainMenu": [
+    {
+      "id": "file",
+      "children": [
+        {
+          "caption": "Open directory",
+          "command": {
+            "command": "openDir"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+    "name": "Plugin",
+    "version": "1.0",
+    "apiVersion": "1.0",
+    "main": "main.py",
+    "menu": "Main.vt-menu",
+    "hotkeys": "Main.vt-keys",
+    "repo": "https://github.com/cherry220-v/Plugin",
+    "platform": [
+        "Windows",
+        "Linux",
+        "OSX"
+    ],
+    "requirements": [
+        "https://github.com/cherry220-v/Plugin2"
+    ],
+    "module": [
+        "requests",
+        "PyQt6"
+    ]
+}
