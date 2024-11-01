@@ -6,14 +6,17 @@
         {
           "caption": "Open file",
           "command": {
-            "command": "openFile"
+            "command": "OpenFileCommand",
+            "kwargs": {
+              "dlg": true
+            }
           },
           "shortcut": "ctrl+o"
         },
         {
           "caption": "Save file",
           "command": {
-            "command": "saveFile"
+            "command": "SaveFileCommand"
           },
           "shortcut": "ctrl+s"
         },

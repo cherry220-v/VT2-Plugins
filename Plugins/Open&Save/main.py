@@ -1,79 +1,147 @@
+def execList(lst):
+    try: return eval(lst)
+    except: return []
+
 def initAPI(api):
-    global vtapi, os, FileReadThread, FileWriteThread, queue
-    vtapi = api
-    os = vtapi.FSys.osModule()
+    global OpenFileCommand, SaveFileCommand, OpenRFileCommand, addToRFiles
+    VtAPI = api
 
-    from classes import FileReadThread, FileWriteThread, queue
-    vtapi.SigSlots.tabClosed.connect(lambda index, file: addToRecent(file))
+    class OpenFileCommand(VtAPI.Plugin.WindowCommand):
+        def __init__(self, api, window):
+            super().__init__(api, window)
+            self.QtCore = self.api.importModule("PyQt6.QtCore")
+            self.chardet = self.api.importModule("chardet")
+            self.os = self.api.importModule("os")
+        def run(self, f: list = [], dlg=False):
+            if dlg:
+                f = self.api.Dialogs.openFileDialog()[0]
+            # self.window.openFile(f) | Use command with name 'OpenFileCommand'
+            self.initThread()
+            for file in f:
+                view = self.window.newFile()
+                view.setFile(file)
+                view.setTitle(self.os.path.basename(file or "Untitled"))
+                self.fileReader = FileReadThread(file, self)
+                self.fileReader.line_read.connect(view.insert)
+                self.fileReader.start()
+                self.fileReader.wait()
+                view.setSaved(True)
+        
+        def initThread(self):
+            global FileReadThread
+            class FileReadThread(VtAPI.Widgets.Thread):
+                line_read = self.QtCore.pyqtSignal(str)
 
-try:
-    recentFiles = (eval(open("recent.f", "a+").read()))
-except SyntaxError: recentFiles = []
+                def __init__(self, file_path: str, cclass, buffer_size: int = 1024, parent=None):
+                    super().__init__(parent)
+                    self.file_path = file_path
+                    self.buffer_size = buffer_size
+                    self._is_running = True
+                    self.cclass = cclass
 
-def apiCommand(n):
-    return vtapi.getCommand(n).get("command")
+                def run(self):
+                    with open(self.file_path, 'rb') as f:
+                        raw_data = f.read(1024)
+                        encoding_info = self.cclass.chardet.detect(raw_data)
+                        encoding = encoding_info.get('encoding', 'utf-8')
 
-def addToRecent(f):
-    recentFiles.append(f)
-    recLog = open("recent.f", "w+")
-    recLog.truncate(0)
-    recLog.write(str(recentFiles))
-    recLog.close()
+                    with open(self.file_path, 'r', encoding=encoding) as f:
+                        while self._is_running:
+                            chunk = f.read(self.buffer_size)
+                            if not chunk:
+                                break
+                            self.line_read.emit(chunk)
+                            self.msleep(50)
 
-def openRecentFile(e=False):
-    i = vtapi.Tab.currentTabIndex()
-    if len(recentFiles) > 0:
-        openFile([recentFiles[-1]])
-        recentFiles.remove(recentFiles[-1])
-        recLog = open("recent.f", "w+")
-        recLog.truncate(0)
-        recLog.write(str(recentFiles))
-        recLog.close()
+                def stop(self):
+                    self._is_running = False
 
-def openFile(filePath=None, encoding=None, used=True):
-    if not filePath and used:
-        filePath, _ = vtapi.App.openFileDialog()
-        if not filePath:
-            return
-    for file in filePath:
-        file = os.path.abspath(file)
-        encoding = encoding or 'utf-8'
-        apiCommand("addTab")(name=file, canSave=True)
-        vtapi.Tab.setTab(-1)
-        i = vtapi.Tab.currentTabIndex()
-        vtapi.Tab.setTabFile(i, file)
-        thread = FileReadThread(vtapi, file)
-        thread.chunkRead = queue.Queue()
+    class SaveFileCommand(VtAPI.Plugin.WindowCommand):
+        def __init__(self, api, window):
+            super().__init__(api, window)
+            self.QtCore = self.api.importModule("PyQt6.QtCore")
+            self.os = self.api.importModule("os")
+        def run(self, view: VtAPI.View | None = None, dlg=False):
+            if not view:
+                view = self.window.activeView
+            if dlg or not view.getFile():
+                f = self.api.Dialogs.saveFileDialog()[0]
+            else:
+                f = view.getFile()
+            # self.window.saveFile(f) | Use command with name 'SaveFileCommand'
+            self.initThread()
+            text = view.getText()
+            view.setFile(f)
+            view.setTitle(self.os.path.basename(f))
+            writeThread = FileWriteThread(f, text, self)
+            writeThread.progress.connect(lambda p: print(f"Progress: {p}%"))
+            writeThread.finished.connect(lambda: print("File writing completed"))
+            writeThread.error.connect(lambda e: print("Error:", e))
 
-        thread.start()
+            writeThread.start()
+            writeThread.wait()
+            view.setSaved(True)
+        def initThread(self):
+            global FileWriteThread
+            class FileWriteThread(VtAPI.Widgets.Thread):
+                progress = self.QtCore.pyqtSignal(int)
+                finished = self.QtCore.pyqtSignal()
+                error = self.QtCore.pyqtSignal(str)
 
-        while thread.is_alive():
-            try:
-                chunk = thread.chunkRead.get(timeout=0.1)
-                vtapi.Tab.setTabText(i, chunk)
-            except queue.Empty:
-                continue
+                def __init__(self, file_path, content, api, parent=None, chunk_size=4096):
+                    super().__init__(parent)
+                    self.file_path = file_path
+                    self.content = content
+                    self.chunk_size = chunk_size
+                    self.QtCore = api.QtCore
 
-        thread.finished.wait()
-        thread.stop()
-        vtapi.Tab.setTabTitle(i, os.path.basename(file or "Untitled"))
-        vtapi.Tab.setTabSaved(vtapi.Tab.currentTabIndex(), True)
+                def run(self):
+                    try:
+                        total_length = len(self.content)
+                        written_length = 0
 
-def saveFile(f=None, text=None):
-    i = vtapi.Tab.currentTabIndex()
-    text = text or vtapi.Tab.getTabText(i)
-    if vtapi.Tab.getTabCanSave(i):
-        if f:
-            vtapi.Tab.setTabFile(i, f)
-        if not vtapi.Tab.getTabFile(i):
-            vtapi.Tab.setTabFile(i, vtapi.App.saveFileDialog()[0])
-        if vtapi.Tab.getTabFile(i):
-            thread = FileWriteThread(vtapi, text)
-            thread.start()
-            thread.finished.wait()
-            thread.stop()
-            vtapi.Tab.setTabTitle(i, os.path.basename(vtapi.Tab.getTabFile(i) or "Untitled"))
-            vtapi.Tab.setTabSaved(i, True)
+                        with open(self.file_path, 'w', encoding='utf-8') as file:
+                            for i in range(0, total_length, self.chunk_size):
+                                chunk = self.content[i:i + self.chunk_size]
+                                file.write(chunk)
+                                written_length += len(chunk)
+                                
+                                progress_percent = int((written_length / total_length) * 100)
+                                self.progress.emit(progress_percent)
 
-def saveAsFile():
-    saveFile(vtapi.App.saveFileDialog()[0])
+                        self.finished.emit()
+                    except Exception as e:
+                        self.error.emit(str(e))
+
+    class OpenRFileCommand(VtAPI.Plugin.WindowCommand):
+        def __init__(self, api, window):
+            super().__init__(api, window)
+            self.os = self.api.importModule("os")
+            self.ast = self.api.importModule("ast")
+        def run(self):
+            recentFiles = open("recent.f", "r+")
+            print(self.os.path.abspath(recentFiles.name))
+            fList = self.ast.literal_eval(recentFiles.read())
+            print(fList)
+            if len(fList) > 0 and self.window.getCommand("OpenFileCommand"):
+                if fList[-1]:
+                    self.window.runCommand({"command": "OpenFileCommand", "kwargs": {"f": [fList[-1]]}})
+                fList.remove(fList[-1])
+                recentFiles.seek(0)
+                recentFiles.truncate()
+                recentFiles.write(str(fList))
+                recentFiles.close()
+    
+    def addToRFiles(view, api):
+        if view.getFile():
+            ast = api.importModule("ast")
+            recentFiles = open("recent.f", "r+")
+            fList = ast.literal_eval(recentFiles.read())
+            fList.append(view.getFile())
+            recentFiles.seek(0)
+            recentFiles.truncate()
+            recentFiles.write(str(fList))
+            recentFiles.close()
+
+    VtAPI.activeWindow.signals.tabClosed.connect(lambda view: addToRFiles(view, VtAPI))
+    VtAPI.activeWindow.registerCommandClass({"command": OpenRFileCommand, "shortcut": "ctrl+shift+t"})
